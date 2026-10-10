@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ur">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Web Proxy — apna proxy lagao</title>
+<style>
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",sans-serif;background:#0b1220;color:#e5e7eb;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+  .card{width:100%;max-width:460px;background:#111a2e;border:1px solid #243356;border-radius:18px;padding:28px;box-shadow:0 12px 40px #0008}
+  h1{margin:0 0 4px;font-size:22px}
+  .sub{color:#9ca3af;font-size:13px;margin-bottom:20px}
+  label{display:block;font-size:13px;color:#9ca3af;margin:12px 0 5px}
+  input,select{width:100%;padding:10px 12px;border-radius:10px;border:1px solid #2c3d63;background:#0e1628;color:#e5e7eb;font-size:15px;outline:none}
+  input:focus,select:focus{border-color:#2563eb}
+  .row{display:flex;gap:10px}
+  .row>div{flex:1}
+  .btn{width:100%;margin-top:18px;padding:12px;border:0;border-radius:12px;background:#2563eb;color:#fff;font-size:16px;font-weight:600;cursor:pointer}
+  .btn:disabled{opacity:.5;cursor:wait}
+  .btn.ghost{background:#1f2c4d;margin-top:10px}
+  .status{margin-top:14px;font-size:14px;min-height:20px}
+  .status.err{color:#f87171}
+  .status.ok{color:#34d399}
+  .note{margin-top:16px;font-size:12px;color:#6b7280;line-height:1.6}
+  .connected{display:none;margin-top:14px;background:#052e22;border:1px solid #065f46;border-radius:12px;padding:12px;font-size:14px}
+  .hidden{display:none!important}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>🌐 Web Proxy</h1>
+  <div class="sub">Apna custom proxy lagao — phir jo site kholo ge, request usi proxy se jayegi.</div>
+
+  <div id="step1">
+    <label>Protocol</label>
+    <select id="protocol">
+      <option value="http">HTTP</option>
+      <option value="https">HTTPS</option>
+      <option value="socks5">SOCKS5</option>
+    </select>
+    <div class="row">
+      <div><label>Proxy host / IP</label><input id="host" placeholder="123.45.67.89" autocomplete="off"></div>
+      <div style="max-width:110px"><label>Port</label><input id="port" placeholder="8080" inputmode="numeric" autocomplete="off"></div>
+    </div>
+    <div class="row">
+      <div><label>Username (agar ho)</label><input id="username" placeholder="optional" autocomplete="off"></div>
+      <div><label>Password (agar ho)</label><input id="password" type="password" placeholder="optional" autocomplete="off"></div>
+    </div>
+    <label style="margin-top:14px"><input type="checkbox" id="direct" style="width:auto"> Proxy ke baghair seedha connect (direct)</label>
+    <button class="btn" id="connectBtn" onclick="connectProxy()">Proxy lagao</button>
+    <div class="status" id="status"></div>
+    <div class="connected" id="connectedBox">
+      ✅ Connected — <span id="viaLabel"></span><br>
+      <button class="btn ghost" style="margin-top:10px" onclick="checkIp()">Mera IP check karo</button>
+      <button class="btn ghost" onclick="logout()">Proxy hatao (logout)</button>
+    </div>
+  </div>
+
+  <div id="step2" class="hidden">
+    <label>Website ka URL kholo</label>
+    <input id="targetUrl" placeholder="example.com" autocomplete="off">
+    <button class="btn" onclick="goSite()">Kholo</button>
+    <button class="btn ghost" onclick="backToProxy()">Proxy badlo</button>
+  </div>
+
+  <div class="note">
+    🔒 Proxy ki details sirf is session ke liye server ki memory me rehti hain — save nahi hotin, log nahi hotin. 45 minute idle rehne par session khatam ho jata hai.<br>
+    ⚠️ Ye sirf browser-traffic ke liye hai — kisi app ka traffic is se nahi guzrega.
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+function status(msg, isErr){ const s=$('status'); s.textContent=msg; s.className='status '+(isErr?'err':msg?'ok':''); }
+async function connectProxy(){
+  const btn=$('connectBtn'); btn.disabled=true;
+  status('Proxy test ho raha hai...');
+  const direct=$('direct').checked;
+  try{
+    const r=await fetch('/api/session',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({protocol:$('protocol').value,host:$('host').value,port:$('port').value,
+        username:$('username').value,password:$('password').value,direct})});
+    const j=await r.json();
+    if(!j.ok){ status('❌ '+j.error,true); btn.disabled=false; return; }
+    $('viaLabel').textContent='via '+j.via;
+    $('connectedBox').style.display='block';
+    $('step1').querySelectorAll('input,select').forEach(e=>{ if(e.id!=='targetUrl') e.disabled=true; });
+    btn.classList.add('hidden');
+    $('step2').classList.remove('hidden');
+    status('');
+    $('targetUrl').focus();
+  }catch(e){ status('❌ Server se rabta nahi ho saka.',true); }
+  btn.disabled=false;
+}
+function goSite(){
+  let u=$('targetUrl').value.trim();
+  if(!u) return;
+  if(!/^https?:\/\//i.test(u)) u='https://'+u;
+  location.href='/go/'+encodeURIComponent(u);
+}
+function checkIp(){ window.open('/go/'+encodeURIComponent('https://ifconfig.me'),'_blank'); }
+async function logout(){
+  await fetch('/api/logout',{method:'POST'});
+  location.reload();
+}
+function backToProxy(){ logout(); }
+$('targetUrl')?.addEventListener('keydown',e=>{ if(e.key==='Enter') goSite(); });
+$('direct').addEventListener('change',e=>{
+  const d=e.target.checked;
+  ['protocol','host','port','username','password'].forEach(id=>$(id).disabled=d);
+});
+</script>
+</body>
+</html>
